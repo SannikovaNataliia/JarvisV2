@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jarvis</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header id="status-bar">
+    <span class="status-item">State: <strong id="status-state">idle</strong></span>
+    <span class="status-item">Mode: <strong id="status-mode">text</strong></span>
+    <span class="status-item" id="status-conn">disconnected</span>
+    <span class="status-item mode-switch">
+      <button id="mode-text" class="mode-btn active" type="button">Text</button>
+      <button id="mode-voice" class="mode-btn" type="button" disabled title="Voice mode not implemented yet">Voice</button>
+    </span>
+  </header>
+
+  <main id="history"></main>
+
+  <footer id="input-row">
+    <textarea id="input-field" placeholder="Ask Jarvis..." rows="1"></textarea>
+    <button id="send-btn" type="button">Send</button>
+  </footer>
+
+  <section id="console-panel">
+    <div id="console-header">
+      <button id="console-toggle" type="button">Console &#9662;</button>
+      <select id="console-level">
+        <option value="debug">Debug</option>
+        <option value="info" selected>Info</option>
+        <option value="warn">Warn</option>
+        <option value="error">Error</option>
+      </select>
+      <button id="console-pause" type="button">Pause</button>
+    </div>
+    <div id="console-lines"></div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

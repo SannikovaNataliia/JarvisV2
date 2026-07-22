@@ -134,6 +134,9 @@ Debug logging is intentional and stays in production. Do not remove debug lines 
 - **Themes are data.** Colors live in `frontend/themes/*.json` and are applied through CSS
   variables. Never hardcode a color in a stylesheet or component.
 - **Retry audio streams.** PyAudio stream init can fail (`OSError -9999`); wrap it in a retry loop.
+- **One model family.** Both modes run on Gemini so Jarvis has a single personality.
+  Voice mode: Gemini Live. Text mode: Gemini Flash. Other providers may only be added
+  as an explicit fallback, never as the default path.
 
 ---
 
@@ -157,12 +160,18 @@ Do not skip ahead. Each step must run before the next begins.
 
 1. Log bus + backend facade
 2. FastAPI WebSocket server + protocol
-3. Minimal frontend: input field + console panel, **text mode only**
-4. pywebview shell (native window)
-5. Action buttons -> command layer
-6. Voice mode: wake word, persistent Gemini Live session, session resumption
-7. Themes
+3. Minimal frontend (input field + console panel, **text mode only**)
+   together with the pywebview shell — see rule below
+4. Action buttons -> command layer
+5. Voice mode: wake word, persistent Gemini Live session, session resumption
+6. Themes
 
-Known constraint for step 6: the previous version reconnected the Live session on every
+**The UI is never opened in a browser, at any stage — not even for testing.**
+The pywebview shell therefore ships together with the first frontend, so there is
+never a point in development where a browser is the only way to see the interface.
+Serving `frontend/` as static files is an implementation detail of the shell,
+not an invitation to open `localhost` in Chrome.
+
+Known constraint for step 5: the previous version reconnected the Live session on every
 turn, which caused mic churn and lost speech onsets. The new implementation must hold
 **one persistent session** and use session resumption for the connection lifetime limit.
