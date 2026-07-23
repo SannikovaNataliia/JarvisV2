@@ -167,6 +167,13 @@ def setup_logging(level: int = logging.DEBUG) -> None:
     root.addHandler(console_handler)
     root.addHandler(bus_handler)
 
+    # These libraries log every frame/request at DEBUG, including raw payload
+    # bytes (e.g. websockets logs the full JSON of every session.send() call,
+    # base64 audio and all). At root=DEBUG that flooded the bus badly enough
+    # to visibly delay transcript delivery over the WebSocket — not cosmetic.
+    for noisy in ("websockets", "websockets.client", "websockets.server", "httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     # stdout -> info, stderr -> error, so the console panel's level filter is meaningful.
     sys.stdout = _TeeStream(real_stdout, "stdout", "info")
     sys.stderr = _TeeStream(real_stderr, "stderr", "error")

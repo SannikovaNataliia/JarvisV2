@@ -1,27 +1,14 @@
 """JarvisBackend — the only thing the server talks to. Knows nothing about WebSockets."""
 
 import logging
-from enum import Enum
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, Optional
 
 from backend import config
+from backend.enums import Mode, State
+from backend.live_session import LiveSession
 from backend.router import answer
 
 logger = logging.getLogger(__name__)
-
-
-class State(str, Enum):
-    IDLE = "idle"
-    WAKING = "waking"
-    LISTENING = "listening"
-    THINKING = "thinking"
-    SPEAKING = "speaking"
-
-
-class Mode(str, Enum):
-    VOICE = "voice"
-    TEXT = "text"
-
 
 StateCallback = Callable[[State], Awaitable[None]]
 TranscriptCallback = Callable[[str, str, bool], Awaitable[None]]
@@ -34,6 +21,7 @@ class JarvisBackend:
         self.history: List[dict] = []
         self._on_state: List[StateCallback] = []
         self._on_transcript: List[TranscriptCallback] = []
+        self._live_session: Optional[LiveSession] = None
 
     @property
     def state(self) -> State:
@@ -57,20 +45,56 @@ class JarvisBackend:
         for cb in self._on_state:
             await cb(new_state)
 
-    async def _emit_transcript(self, role: str, text: str, final: bool = True) -> None:
-        self.history.append({"role": role, "text": text})
+    async def _broadcast_transcript(self, role: str, text: str, final: bool) -> None:
         for cb in self._on_transcript:
             await cb(role, text, final)
 
-    def set_mode(self, mode: str) -> None:
-        if mode == Mode.VOICE.value:
-            logger.warning("voice mode not implemented yet")
+    def _append_history(self, role: str, text: str) -> None:
+        if text:
+            self.history.append({"role": role, "text": text})
+
+    async def _emit_transcript(self, role: str, text: str, final: bool = True) -> None:
+        """Text mode: one full message, both the UI event and the history entry
+        together. Voice mode streams many partial chunks per turn instead and
+        only appends to history once, on turn completion — see live_session.py."""
+        self._append_history(role, text)
+        await self._broadcast_transcript(role, text, final)
+
+    async def set_mode(self, mode: str) -> None:
+        if mode == self._mode.value:
+            logger.debug("facade.set_mode: already in mode %r, ignoring", mode)
             return
-        self._mode = Mode.TEXT
+
+        logger.info("facade.set_mode: %s -> %s", self._mode.value, mode)
+
+        if mode == Mode.VOICE.value:
+            session = LiveSession(
+                set_state=self._set_state,
+                broadcast_transcript=self._broadcast_transcript,
+                append_history=self._append_history,
+                get_history=lambda: self.history,
+            )
+            try:
+                await session.start()
+            except Exception:
+                logger.exception("facade.set_mode: failed to start voice mode")
+                await self._set_state(State.IDLE)
+                return
+            self._live_session = session
+            self._mode = Mode.VOICE
+        elif mode == Mode.TEXT.value:
+            if self._live_session is not None:
+                logger.debug("facade.set_mode: stopping live session for text mode")
+                await self._live_session.stop()
+                self._live_session = None
+            self._mode = Mode.TEXT
+            await self._set_state(State.IDLE)
+        else:
+            logger.warning("set_mode: unknown mode %r", mode)
 
     async def send_text(self, text: str) -> None:
         await self._set_state(State.THINKING)
-        recent = self.history[-config.ROUTER_HISTORY_LIMIT:]
+        recent = self.history[-config.ROUTER_HISTORY_LIMIT :]
         await self._emit_transcript("user", text)
         reply = await answer(text, recent)
         await self._emit_transcript("jarvis", reply)
@@ -80,7 +104,12 @@ class JarvisBackend:
         logger.warning("run_command not implemented: %s", command)
 
     async def start_listening(self) -> None:
-        logger.warning("start_listening not implemented")
+        # No wake word yet (step 5c): voice mode already listens continuously
+        # once connected, so there is nothing separate to trigger here.
+        logger.debug("start_listening: no-op, voice mode already listens continuously")
 
     async def stop(self) -> None:
-        logger.warning("stop not implemented")
+        if self._live_session is not None:
+            await self._live_session.stop_playback()
+        else:
+            logger.debug("stop: no active voice session")

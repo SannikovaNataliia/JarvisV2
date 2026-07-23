@@ -151,6 +151,11 @@ Debug logging is intentional and stays in production. Do not remove debug lines 
 - **Do not propose a simpler workaround in place of a proper implementation.** If the proper
   implementation is expensive, say so and let the decision be made explicitly.
 - **Suggest a commit** after every 2-3 meaningful changes, with a descriptive message.
+- **Diagnose before fixing.** When something misbehaves, find and report the cause before
+  changing code. Never mask a bug with a retry, a reconnect, a timeout bump, or a fallback path.
+- **Never modify the project venv.** `venv/` belongs to the user. Do not install into it,
+  uninstall from it, delete it, or recreate it. If a throwaway environment is needed,
+  create it elsewhere and clean up only what you created.
 
 ---
 

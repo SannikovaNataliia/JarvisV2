@@ -89,15 +89,24 @@ function renderState(data) {
   $("#status-mode").textContent = data.mode;
   $("#mode-text").classList.toggle("active", data.mode === "text");
   $("#mode-voice").classList.toggle("active", data.mode === "voice");
+
+  const isVoice = data.mode === "voice";
+  $("#mic-indicator").hidden = !isVoice;
+  $("#mic-indicator").classList.toggle("speaking", data.state === "speaking");
+  $("#input-field").disabled = isVoice;
+  $("#send-btn").disabled = isVoice;
 }
 
 function renderTranscript(data) {
   const { role, text, final } = data;
   if (ui.lastCard && ui.lastCard.role === role && !ui.lastCard.final) {
-    ui.lastCard.el.querySelector(".card-text").textContent += text;
+    if (text) ui.lastCard.el.querySelector(".card-text").textContent += text;
     ui.lastCard.final = final;
     scrollHistoryToBottom();
-  } else {
+  } else if (text) {
+    // A bare final:true "" ping (live_session.py's turn-end finalization for
+    // a role whose card is no longer ui.lastCard) has no text to show and no
+    // existing card of this role to close out here — nothing to do.
     appendCard(role, text, final);
   }
 }

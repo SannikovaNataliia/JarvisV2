@@ -10,16 +10,14 @@ command/app routing, multi-action dispatch) is out of scope for this build
 and intentionally dropped.
 """
 
-import json
 import logging
-from datetime import datetime
-from pathlib import Path
 from typing import List, Optional
 
 from google import genai
 from google.genai import types
 
 from backend import config
+from backend.personality import build_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -31,32 +29,6 @@ def _get_client() -> genai.Client:
     if _client is None:
         _client = genai.Client(api_key=config.GEMINI_API_KEY, http_options={"api_version": "v1beta"})
     return _client
-
-
-def _build_system_prompt() -> str:
-    try:
-        p = json.loads(Path(config.PERSONALITY_FILE).read_text(encoding="utf-8"))
-    except Exception:
-        logger.exception("failed to load personality file, using fallback prompt")
-        return "You are Jarvis, a personal AI assistant."
-
-    lines = [
-        "You are Jarvis, a personal AI assistant.",
-        "",
-        f"Core traits: {p.get('core_traits', '')}",
-        "",
-        "Speech rules:",
-        *(f"- {rule}" for rule in p.get("speech_rules", [])),
-    ]
-    if p.get("conversation_style"):
-        lines += ["", f"Conversation style: {p['conversation_style']}"]
-    if p.get("behavior_rules"):
-        lines += ["", "Behavior rules:", *(f"- {rule}" for rule in p["behavior_rules"])]
-
-    now = datetime.now().strftime("%A, %B %d %Y, %H:%M")
-    lines += ["", f"Current date and time: {now}"]
-
-    return "\n".join(lines)
 
 
 async def answer(text: str, history: List[dict]) -> str:
@@ -80,7 +52,7 @@ async def answer(text: str, history: List[dict]) -> str:
             contents.pop()
 
         config_ = types.GenerateContentConfig(
-            system_instruction=_build_system_prompt(),
+            system_instruction=build_system_prompt(),
             max_output_tokens=config.GEMINI_MAX_OUTPUT_TOKENS,
         )
 

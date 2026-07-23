@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import config, protocol
 from backend.facade import JarvisBackend, State
+from backend.live_session import check_model_availability
 from backend.logbus import LogRecord, bus
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ async def _startup() -> None:
     global _main_loop
     _main_loop = asyncio.get_running_loop()
     bus.subscribe(_on_log_record)
+    await check_model_availability()  # once per process, not per voice-mode entry
     logger.info("Jarvis backend ready on %s:%s", config.HOST, config.PORT)
 
 
@@ -100,6 +102,13 @@ async def ws_endpoint(websocket: WebSocket) -> None:
             await _handle_message(msg)
     except WebSocketDisconnect:
         pass
+    except RuntimeError as e:
+        # A client can disconnect while we're mid-await inside _handle_message
+        # (e.g. set_mode("voice") opening the mic + Live socket takes real
+        # time) — Starlette then raises a bare RuntimeError from receive_text()
+        # instead of WebSocketDisconnect. Treat it the same: log and clean up,
+        # never let a disconnect race take down the connection handler.
+        logger.debug("client connection closed mid-request: %s", e)
     finally:
         _clients.discard(websocket)
         logger.debug("client disconnected (%d total)", len(_clients))
@@ -117,7 +126,9 @@ async def _handle_message(msg: dict) -> None:
     if mtype == protocol.SEND_TEXT:
         await backend.send_text(data.get("text", ""))
     elif mtype == protocol.SET_MODE:
-        backend.set_mode(data.get("mode", "text"))
+        requested = data.get("mode", "text")
+        logger.info("ws: client requested set_mode=%r (current mode=%s)", requested, backend.mode.value)
+        await backend.set_mode(requested)
         await _broadcast_state()
     elif mtype == protocol.GET_STATE:
         await _broadcast_state()
