@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 StateCallback = Callable[[State], Awaitable[None]]
 TranscriptCallback = Callable[[str, str, bool], Awaitable[None]]
+ErrorCallback = Callable[[str, bool], Awaitable[None]]
 
 
 class JarvisBackend:
@@ -21,6 +22,7 @@ class JarvisBackend:
         self.history: List[dict] = []
         self._on_state: List[StateCallback] = []
         self._on_transcript: List[TranscriptCallback] = []
+        self._on_error: List[ErrorCallback] = []
         self._live_session: Optional[LiveSession] = None
 
     @property
@@ -37,6 +39,9 @@ class JarvisBackend:
     def on_transcript(self, callback: TranscriptCallback) -> None:
         self._on_transcript.append(callback)
 
+    def on_error(self, callback: ErrorCallback) -> None:
+        self._on_error.append(callback)
+
     def get_state(self) -> dict:
         return {"state": self._state.value, "mode": self._mode.value, "history": list(self.history)}
 
@@ -48,6 +53,20 @@ class JarvisBackend:
     async def _broadcast_transcript(self, role: str, text: str, final: bool) -> None:
         for cb in self._on_transcript:
             await cb(role, text, final)
+
+    async def _broadcast_error(self, message: str, fatal: bool) -> None:
+        for cb in self._on_error:
+            await cb(message, fatal)
+
+    async def _handle_live_fatal_error(self, message: str) -> None:
+        """LiveSession calls this when reconnect attempts are exhausted — a
+        fatal end to the voice session, not just one connection. Reset mode
+        state here (before broadcasting) so the state message that follows
+        reports mode=text, not a voice mode that's actually dead."""
+        logger.error("facade: voice session failed permanently: %s", message)
+        self._live_session = None
+        self._mode = Mode.TEXT
+        await self._broadcast_error(message, True)
 
     def _append_history(self, role: str, text: str) -> None:
         if text:
@@ -73,6 +92,7 @@ class JarvisBackend:
                 broadcast_transcript=self._broadcast_transcript,
                 append_history=self._append_history,
                 get_history=lambda: self.history,
+                on_fatal_error=self._handle_live_fatal_error,
             )
             try:
                 await session.start()

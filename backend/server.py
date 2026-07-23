@@ -55,8 +55,13 @@ async def _on_transcript(role: str, text: str, final: bool) -> None:
     await _broadcast(protocol.TRANSCRIPT, {"role": role, "text": text, "final": final})
 
 
+async def _on_error(message: str, fatal: bool) -> None:
+    await _broadcast(protocol.ERROR, {"message": message, "fatal": fatal})
+
+
 backend.on_state(_on_state)
 backend.on_transcript(_on_transcript)
+backend.on_error(_on_error)
 
 
 def _on_log_record(record: LogRecord) -> None:

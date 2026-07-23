@@ -48,3 +48,24 @@ CHUNK_SIZE = 1024
 # visibly delay transcript delivery — this is not cosmetic. Flip on only
 # when actually debugging the audio send path.
 DEBUG_AUDIO_CHUNKS = os.getenv("DEBUG_AUDIO_CHUNKS", "false").lower() in ("1", "true", "yes")
+
+# Voice mode: session continuity (backend/live_session.py, step 5b).
+#
+# Left unset by default so the SDK/API's own default trigger applies —
+# override only when actually tuning compression behaviour. Set via env var
+# because there's no single "right" value: it trades off session length
+# against how much of the conversation the model can still see.
+_trigger = os.getenv("LIVE_COMPRESSION_TRIGGER_TOKENS")
+LIVE_COMPRESSION_TRIGGER_TOKENS = int(_trigger) if _trigger else None
+
+# Reconnect backoff after a dropped connection (GoAway or an unexpected
+# error): attempt, wait, attempt again, doubling each time up to the cap.
+LIVE_RECONNECT_MAX_RETRIES = int(os.getenv("LIVE_RECONNECT_MAX_RETRIES", "5"))
+LIVE_RECONNECT_BACKOFF_BASE_S = float(os.getenv("LIVE_RECONNECT_BACKOFF_BASE_S", "1.0"))
+LIVE_RECONNECT_BACKOFF_MAX_S = float(os.getenv("LIVE_RECONNECT_BACKOFF_MAX_S", "30.0"))
+
+# Audio captured while reconnecting is buffered and replayed once the new
+# connection is up. Anything older than this when it's replayed (or while
+# still waiting to reconnect) is stale enough that sending it would just
+# confuse the model, so it's dropped instead — see live_session.py.
+LIVE_RECONNECT_AUDIO_MAX_GAP_S = float(os.getenv("LIVE_RECONNECT_AUDIO_MAX_GAP_S", "5.0"))

@@ -10,6 +10,7 @@ class State(str, Enum):
     LISTENING = "listening"
     THINKING = "thinking"
     SPEAKING = "speaking"
+    RECONNECTING = "reconnecting"
 
 
 class Mode(str, Enum):
